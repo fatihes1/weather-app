@@ -66,7 +66,7 @@ export default function App() {
       const json = await response.json();
       setWeather(formatWeatherData(json));
     } catch (e) {
-      alert("Hava durumu verisi alınamadı.");
+      alert("Weather data could not be retrieved.");
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +155,7 @@ export default function App() {
                 <View style={styles.searchBarWrapper}>
                   <Search color="rgba(255,255,255,0.4)" size={20} />
                   <TextInput
-                      placeholder="Hangi şehre bakmak istersin?"
+                      placeholder="Search for a city..."
                       placeholderTextColor="rgba(255,255,255,0.4)"
                       style={styles.searchInput}
                       autoFocus={true}
@@ -192,25 +192,25 @@ export default function App() {
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
             <View style={styles.header}>
               <Text style={styles.cityText}>{cityName}</Text>
-              <Text style={styles.updateText}>SON GÜNCELLEME {weather.lastUpdated}</Text>
+              <Text style={styles.updateText}>LAST UPDATED {weather.lastUpdated}</Text>
             </View>
 
             <ShimmerText text={`${weather.temp}°`} style={styles.mainTemp} />
             <Text style={styles.mainCondition}>{weather.condition}</Text>
 
             <View style={styles.bentoLarge}>
-              <Text style={styles.cardTitle}>24 SAATLİK TAHMİN</Text>
+              <Text style={styles.cardTitle}>24-HOUR FORECAST</Text>
               <TempGraph hourlyData={weather.hourly} />
             </View>
 
             <View style={styles.statsRow}>
-              <StatCard icon={<Droplets color="#5AC8FA" size={20} />} value={`%${weather.humidity}`} label="NEM" />
-              <StatCard icon={<Sun color="#FFCC00" size={20} />} value={weather.uvIndex} label="UV İNDEKSİ" />
-              <StatCard icon={<Wind color="#AF52DE" size={20} />} value={`${weather.windSpeed} km/h`} label="RÜZGAR" />
+              <StatCard icon={<Droplets color="#5AC8FA" size={20} />} value={`%${weather.humidity}`} label="HUMIDITY" />
+              <StatCard icon={<Sun color="#FFCC00" size={20} />} value={weather.uvIndex} label="UV INDEX" />
+              <StatCard icon={<Wind color="#AF52DE" size={20} />} value={`${weather.windSpeed} km/h`} label="WIND" />
             </View>
 
             <View style={styles.forecastSection}>
-              <Text style={styles.sectionHeader}>ÖNÜMÜZDEKİ 7 GÜN</Text>
+              <Text style={styles.sectionHeader}>NEXT 7 DAYS</Text>
               {weather.daily.map((day, i) => (
                   <View key={i} style={styles.forecastRow}>
                     <Text style={styles.dayText}>{day.day}</Text>
