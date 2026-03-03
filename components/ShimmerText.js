@@ -5,27 +5,26 @@ import MaskedView from '@react-native-masked-view/masked-view';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-
-
-export const ShimmerText = ({ text, style }) => {
+export const ShimmerText = ({ text, style, shimmerColors }) => {
     const animatedValue = useRef(new Animated.Value(0)).current;
+
+    // Varsayılan renkler (Eğer App.js'den veri gelmezse kullanılacak 5'li dizi)
+    const defaultColors = ['#749BFF', '#749BFF', '#FFFFFF', '#749BFF', '#749BFF'];
 
     useEffect(() => {
         Animated.loop(
             Animated.timing(animatedValue, {
                 toValue: 1,
-                duration: 5000, // Süreyi biraz daha artırarak akıcılığı pekiştirdik
-                easing: Easing.inOut(Easing.ease), // "Lüks" hissi veren sinüssel yumuşatma
+                duration: 5000,
+                easing: Easing.inOut(Easing.ease), //
                 useNativeDriver: true,
             })
         ).start();
     }, []);
 
-    // Kesintisiz döngü sırrı: 0 -> 0.5 -> 1
-    // Değer 0'dan 0.5'e giderken sağa kayar, 0.5'ten 1'e giderken sola geri döner.
     const translateX = animatedValue.interpolate({
         inputRange: [0, 0.5, 1],
-        outputRange: [-SCREEN_WIDTH * 0.4, SCREEN_WIDTH * 0.4, -SCREEN_WIDTH * 0.4],
+        outputRange: [-SCREEN_WIDTH * 0.5, SCREEN_WIDTH * 0.5, -SCREEN_WIDTH * 0.5],
     });
 
     return (
@@ -34,14 +33,18 @@ export const ShimmerText = ({ text, style }) => {
                 style={styles.maskedView}
                 maskElement={
                     <View style={styles.maskContainer}>
-                        <Text style={[style, { textAlign: 'center' }]}>{text}</Text>
+                        {/* Sayı sabit kalır, sadece içindeki renkler hareket eder */}
+                        <Text style={[style, { textAlign: 'center', backgroundColor: 'transparent' }]}>
+                            {text}
+                        </Text>
                     </View>
                 }
             >
                 <Animated.View style={[styles.shimmerWrapper, { transform: [{ translateX }] }]}>
                     <LinearGradient
-                        // Daha hibrit bir görünüm için renk dağılımını optimize ettik
-                        colors={['#749BFF', '#FFFFFF', '#749BFF', '#FFFFFF', '#749BFF']}
+                        // App.js'den gelen 5'li dizi buraya girer
+                        colors={shimmerColors || defaultColors}
+                        // 5 renk varsa 5 location olmak zorundadır
                         locations={[0, 0.25, 0.5, 0.75, 1]}
                         start={{ x: 0, y: 0.5 }}
                         end={{ x: 1, y: 0.5 }}
@@ -72,9 +75,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
     },
     shimmerWrapper: {
-        width: SCREEN_WIDTH * 2,
+        width: SCREEN_WIDTH * 2.5,
         height: '100%',
         position: 'absolute',
-        left: -SCREEN_WIDTH * 0.5,
+        left: -SCREEN_WIDTH * 0.75,
     }
 });

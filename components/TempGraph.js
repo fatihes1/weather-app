@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { Svg, Path, Defs, LinearGradient, Stop, Circle, Line, Rect } from 'react-native-svg';
+import { Svg, Path, Defs, LinearGradient, Stop, Circle, Line } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export const TempGraph = ({ hourlyData }) => {
+export const TempGraph = ({ hourlyData, accentColor, theme }) => {
     const [activePoint, setActivePoint] = useState(null);
 
-    const containerWidth = SCREEN_WIDTH - 80; // Matches your padding
+    const containerWidth = SCREEN_WIDTH - 80; // Padding değerine uygun genişlik
     const height = 120;
     const verticalPadding = 20;
 
-    // Find min/max for scaling
+    // Ölçeklendirme için min/max hesaplama
     const temps = hourlyData.map(h => h.temp);
     const minTemp = Math.min(...temps) - 2;
     const maxTemp = Math.max(...temps) + 2;
@@ -33,13 +33,25 @@ export const TempGraph = ({ hourlyData }) => {
         }
     };
 
+    // Varsayılan renk (hata önleyici)
+    const activeAccent = accentColor || '#3478F6';
+
     return (
         <View style={styles.container}>
-            {/* Interactive Tooltip Bubble */}
+            {/* İnteraktif Tooltip Balonu */}
             {activePoint && (
-                <View style={[styles.tooltip, { left: activePoint.x - 25, top: activePoint.y - 45 }]}>
+                <View style={[
+                    styles.tooltip,
+                    {
+                        left: activePoint.x - 25,
+                        top: activePoint.y - 45,
+                        backgroundColor: activeAccent // Dinamik arka plan
+                    }
+                ]}>
                     <Text style={styles.tooltipText}>{activePoint.temp}°</Text>
-                    <Text style={styles.tooltipTime}>{activePoint.displayTime}</Text>
+                    <Text style={[styles.tooltipTime, { color: 'rgba(255,255,255,0.8)' }]}>
+                        {activePoint.displayTime}
+                    </Text>
                 </View>
             )}
 
@@ -51,51 +63,67 @@ export const TempGraph = ({ hourlyData }) => {
                 <Svg height={height} width={containerWidth} style={{ overflow: 'visible' }}>
                     <Defs>
                         <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                            <Stop offset="0" stopColor="#3478F6" stopOpacity="0.3" />
-                            <Stop offset="1" stopColor="#3478F6" stopOpacity="0" />
+                            {/* Gradyan rengi artık dinamik */}
+                            <Stop offset="0" stopColor={activeAccent} stopOpacity="0.3" />
+                            <Stop offset="1" stopColor={activeAccent} stopOpacity="0" />
                         </LinearGradient>
                     </Defs>
 
-                    {/* Area Fill */}
+                    {/* Alan Dolgusu */}
                     <Path
                         d={`${pathData} L ${containerWidth},${height} L 0,${height} Z`}
                         fill="url(#grad)"
                     />
 
-                    {/* Main Line */}
+                    {/* Ana Çizgi */}
                     <Path
                         d={pathData}
                         fill="none"
-                        stroke="#3478F6"
+                        stroke={activeAccent} // Dinamik çizgi rengi
                         strokeWidth="3"
                         strokeLinecap="round"
                     />
 
-                    {/* Vertical Indicator Line */}
+                    {/* Dikey Gösterge Çizgisi */}
                     {activePoint && (
                         <Line
                             x1={activePoint.x} y1="0"
                             x2={activePoint.x} y2={height}
-                            stroke="rgba(255,255,255,0.2)"
+                            stroke={theme.subText} // Temaya uygun yardımcı renk
                             strokeDasharray="4 4"
                         />
                     )}
 
-                    {/* Data Points (Every 4 hours) */}
+                    {/* Veri Noktaları (Her 4 saatte bir) */}
                     {!activePoint && hourlyData.filter((_, i) => i % 4 === 0).map((h, i) => {
                         const p = getXY(i * 4, h.temp);
-                        return <Circle key={i} cx={p.x} cy={p.y} r="4" fill="white" />;
+                        return <Circle
+                            key={i}
+                            cx={p.x}
+                            cy={p.y}
+                            r="4"
+                            fill={theme.text} // Temaya uygun ana metin rengi
+                        />;
                     })}
 
-                    {/* Active Highlight Dot */}
-                    {activePoint && <Circle cx={activePoint.x} cy={activePoint.y} r="6" fill="white" stroke="#3478F6" strokeWidth="2" />}
+                    {/* Aktif Vurgu Noktası */}
+                    {activePoint && <Circle
+                        cx={activePoint.x}
+                        cy={activePoint.y}
+                        r="6"
+                        fill={theme.text}
+                        stroke={activeAccent}
+                        strokeWidth="2"
+                    />}
                 </Svg>
             </View>
 
-            {/* X-Axis Labels */}
+            {/* X Ekseni Etiketleri */}
             <View style={styles.xAxis}>
                 {['Now', '4am', '8am', '12pm', '4pm', '8pm'].map((label, i) => (
-                    <Text key={i} style={styles.axisLabel}>{label}</Text>
+                    <Text key={i} style={[styles.axisLabel, { color: theme.subText }]}>
+                        {label}
+                    </Text>
                 ))}
             </View>
         </View>
@@ -106,20 +134,26 @@ const styles = StyleSheet.create({
     container: { marginTop: 20, width: '100%' },
     tooltip: {
         position: 'absolute',
-        backgroundColor: '#3478F6',
         padding: 6,
         borderRadius: 8,
         width: 50,
         alignItems: 'center',
         zIndex: 10,
+        // Android gölge
+        elevation: 5,
+        // iOS gölge
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
     tooltipText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
-    tooltipTime: { color: 'rgba(255,255,255,0.7)', fontSize: 8 },
+    tooltipTime: { fontSize: 8 },
     xAxis: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginTop: 10,
         paddingHorizontal: 5
     },
-    axisLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: '600' }
+    axisLabel: { fontSize: 10, fontWeight: '600' }
 });

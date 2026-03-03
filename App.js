@@ -1,23 +1,24 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, SafeAreaView, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Linking, Modal, TextInput, FlatList, Dimensions
+  TouchableOpacity, Linking, Modal, TextInput, FlatList, Dimensions, StatusBar, RefreshControl
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import {
   Droplets, Sun, Wind, Cloud, CloudRain,
   CloudLightning, Search, X, Navigation, MapPin
 } from 'lucide-react-native';
 
-// Bileşenlerin yollarını kontrol edin
+// Bileşen yollarının doğruluğundan emin olun
 import { TempGraph } from './components/TempGraph';
 import { ShimmerText } from "./components/ShimmerText";
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Hava Durumu İkon Eşleyici
-const WeatherIcon = ({ condition, size = 22, color = "white" }) => {
+// Dinamik İkon Bileşeni
+const WeatherIcon = ({ condition, size = 22, color }) => {
   switch (condition) {
     case 'Cloudy':
     case 'MostlyCloudy':
@@ -31,11 +32,12 @@ const WeatherIcon = ({ condition, size = 22, color = "white" }) => {
   }
 };
 
-const StatCard = ({ icon, value, label }) => (
-    <View style={styles.statCard}>
+// Dinamik StatCard Bileşeni
+const StatCard = ({ icon, value, label, theme }) => (
+    <View style={[styles.statCard, { backgroundColor: theme.cardBg }]}>
       <View style={styles.iconCircle}>{icon}</View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statValue, { color: theme.text }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: theme.subText }]}>{label}</Text>
     </View>
 );
 
@@ -48,10 +50,22 @@ export default function App() {
   const [suggestions, setSuggestions] = useState([]);
   const [attributionUrl, setAttributionUrl] = useState('https://developer.apple.com/weatherkit/data-source-attribution/');
 
-  // Merkezi Veri Çekme Fonksiyonu
+  // --- TEMA TANIMLAMALARI ---
+  const isDay = weather?.isDay;
+  const theme = {
+    bg: isDay ? ['#FFF9E1', '#FFE0A1'] : ['#0B1026', '#1B2144'],
+    text: isDay ? '#4A2E19' : '#FFFFFF',
+    subText: isDay ? 'rgba(74, 46, 25, 0.5)' : 'rgba(255, 255, 255, 0.4)',
+    cardBg: isDay ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.05)',
+    accent: isDay ? '#FF8C00' : '#3478F6',
+    shimmer: isDay ? ['#4A2E19', '#DAA520', '#F2F2F2', '#DAA520', '#4A2E19']
+        : ['#749BFF', '#749BFF', '#FFFFFF', '#749BFF', '#749BFF'],
+    barStyle: isDay ? 'dark-content' : 'light-content'
+  };
+
   const updateWeather = async (lat, lon, customName = null) => {
     setIsLoading(true);
-    setSearchVisible(false); // Listeden seçim yapınca modalı kapat
+    setSearchVisible(false);
     try {
       if (!customName) {
         let geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
@@ -64,25 +78,25 @@ export default function App() {
 
       const response = await fetch(`https://serverless-weather.vercel.app/api/weather?lat=${lat}&lon=${lon}`);
       const json = await response.json();
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setWeather(formatWeatherData(json));
     } catch (e) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       alert("Weather data could not be retrieved.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Yazarken Şehir Önerilerini Getirme
   const fetchSuggestions = async (text) => {
     setSearchQuery(text);
     if (text.length > 2) {
       try {
         const response = await fetch(`https://photon.komoot.io/api/?q=${text}&limit=10`);
-
         const data = await response.json();
         setSuggestions(data.features);
       } catch (e) {
-        console.error("Öneri alınamadı:", e);
+        console.error("Suggestions could not be fetched:", e);
       }
     } else {
       setSuggestions([]);
@@ -90,6 +104,7 @@ export default function App() {
   };
 
   const handleMyLocation = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsLoading(true);
     let location = await Location.getCurrentPositionAsync({});
     updateWeather(location.coords.latitude, location.coords.longitude);
@@ -103,15 +118,15 @@ export default function App() {
     })();
   }, []);
 
-
   const formatWeatherData = (data) => {
     const current = data.currentWeather;
     if (current.metadata?.attributionURL) setAttributionUrl(current.metadata.attributionURL);
 
     return {
+      isDay: current.daylight, //
       temp: Math.round(current.temperature),
       condition: current.conditionCode,
-      humidity: Math.round(current.humidity * 100),
+      humidity: Math.round(current.humidity * 100), //
       uvIndex: current.uvIndex,
       windSpeed: Math.round(current.windSpeed),
       lastUpdated: new Date(current.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -131,55 +146,60 @@ export default function App() {
   };
 
   if (!weather || isLoading) return (
-      <View style={styles.center}><ActivityIndicator size="large" color="#3478F6" /></View>
+      <View style={[styles.center, { backgroundColor: '#0B1026' }]}>
+        <ActivityIndicator size="large" color="#3478F6" />
+      </View>
   );
 
   return (
-      <LinearGradient colors={['#0B1026', '#1B2144']} style={styles.container}>
+      <LinearGradient colors={theme.bg} style={styles.container}>
+        <StatusBar barStyle={theme.barStyle} />
         <SafeAreaView style={{ flex: 1 }}>
 
-          {/* Header Butonları */}
+          {/* Header Actions */}
           <View style={styles.topActions}>
-            <TouchableOpacity onPress={handleMyLocation} style={styles.actionCircle}>
-              <Navigation color="white" size={20} />
+            <TouchableOpacity onPress={handleMyLocation} style={[styles.actionCircle, { backgroundColor: theme.cardBg }]}>
+              <Navigation color={theme.text} size={20} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setSearchVisible(true)} style={styles.actionCircle}>
-              <Search color="white" size={20} />
+            <TouchableOpacity onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setSearchVisible(true)
+            }} style={[styles.actionCircle, { backgroundColor: theme.cardBg }]}>
+              <Search color={theme.text} size={20} />
             </TouchableOpacity>
           </View>
 
-          {/* Akıllı Arama Modalı */}
+          {/* Search Modal */}
           <Modal visible={isSearchVisible} animationType="slide" transparent={true}>
             <View style={styles.modalOverlay}>
-              <LinearGradient colors={['rgba(27,33,68,0.98)', '#0B1026']} style={styles.searchSheet}>
-                <View style={styles.searchBarWrapper}>
-                  <Search color="rgba(255,255,255,0.4)" size={20} />
+              <LinearGradient colors={theme.bg} style={styles.searchSheet}>
+                <View style={[styles.searchBarWrapper, { backgroundColor: theme.cardBg }]}>
+                  <Search color={theme.subText} size={20} />
                   <TextInput
                       placeholder="Search for a city..."
-                      placeholderTextColor="rgba(255,255,255,0.4)"
-                      style={styles.searchInput}
+                      placeholderTextColor={theme.subText}
+                      style={[styles.searchInput, { color: theme.text }]}
                       autoFocus={true}
                       value={searchQuery}
                       onChangeText={fetchSuggestions}
                   />
                   <TouchableOpacity onPress={() => setSearchVisible(false)}>
-                    <X color="white" size={20} />
+                    <X color={theme.text} size={20} />
                   </TouchableOpacity>
                 </View>
 
-                {/* Öneriler Listesi */}
                 <FlatList
                     data={suggestions}
                     keyExtractor={(item, index) => index.toString()}
                     renderItem={({ item }) => (
                         <TouchableOpacity
-                            style={styles.suggestionItem}
+                            style={[styles.suggestionItem, { backgroundColor: theme.cardBg }]}
                             onPress={() => updateWeather(item.geometry.coordinates[1], item.geometry.coordinates[0], item.properties.name)}
                         >
-                          <MapPin color="rgba(255,255,255,0.4)" size={18} />
+                          <MapPin color={theme.subText} size={18} />
                           <View style={{marginLeft: 15}}>
-                            <Text style={styles.suggestionName}>{item.properties.name}</Text>
-                            <Text style={styles.suggestionCountry}>{item.properties.country}</Text>
+                            <Text style={[styles.suggestionName, { color: theme.text }]}>{item.properties.name}</Text>
+                            <Text style={[styles.suggestionCountry, { color: theme.subText }]}>{item.properties.country}</Text>
                           </View>
                         </TouchableOpacity>
                     )}
@@ -189,40 +209,51 @@ export default function App() {
             </View>
           </Modal>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
+          <ScrollView refreshControl={
+            <RefreshControl
+                refreshing={isLoading}
+                onRefresh={handleMyLocation}
+                tintColor={theme.accent}
+            />
+          } showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
             <View style={styles.header}>
-              <Text style={styles.cityText}>{cityName}</Text>
-              <Text style={styles.updateText}>LAST UPDATED {weather.lastUpdated}</Text>
+              <Text style={[styles.cityText, { color: theme.text }]}>{cityName}</Text>
+              <Text style={[styles.updateText, { color: theme.subText }]}>LAST UPDATED {weather.lastUpdated}</Text>
             </View>
 
-            <ShimmerText text={`${weather.temp}°`} style={styles.mainTemp} />
-            <Text style={styles.mainCondition}>{weather.condition}</Text>
+            {/* ShimmerText bileşenine colors prop'u eklediğinizden emin olun */}
+            <ShimmerText text={`${weather.temp}°`} style={styles.mainTemp} shimmerColors={theme.shimmer} />
+            <Text style={[styles.mainCondition, { color: theme.text }]}>{weather.condition}</Text>
 
-            <View style={styles.bentoLarge}>
-              <Text style={styles.cardTitle}>24-HOUR FORECAST</Text>
-              <TempGraph hourlyData={weather.hourly} />
+            <View style={[styles.bentoLarge, { backgroundColor: theme.cardBg }]}>
+              <Text style={[styles.cardTitle, { color: theme.subText }]}>24-HOUR FORECAST</Text>
+              <TempGraph hourlyData={weather.hourly} accentColor={theme.accent} theme={theme} />
             </View>
 
             <View style={styles.statsRow}>
-              <StatCard icon={<Droplets color="#5AC8FA" size={20} />} value={`%${weather.humidity}`} label="HUMIDITY" />
-              <StatCard icon={<Sun color="#FFCC00" size={20} />} value={weather.uvIndex} label="UV INDEX" />
-              <StatCard icon={<Wind color="#AF52DE" size={20} />} value={`${weather.windSpeed} km/h`} label="WIND" />
+              <StatCard theme={theme} icon={<Droplets color={theme.accent} size={20} />} value={`%${weather.humidity}`} label="HUMIDITY" />
+              <StatCard theme={theme} icon={<Sun color={theme.accent} size={20} />} value={weather.uvIndex} label="UV INDEX" />
+              <StatCard theme={theme} icon={<Wind color={theme.accent} size={20} />} value={`${weather.windSpeed} km/h`} label="WIND" />
             </View>
 
             <View style={styles.forecastSection}>
-              <Text style={styles.sectionHeader}>NEXT 7 DAYS</Text>
+              <Text style={[styles.sectionHeader, { color: theme.subText }]}>NEXT 7 DAYS</Text>
               {weather.daily.map((day, i) => (
-                  <View key={i} style={styles.forecastRow}>
-                    <Text style={styles.dayText}>{day.day}</Text>
-                    <View style={styles.iconBox}><WeatherIcon condition={day.condition} /></View>
-                    <Text style={styles.lowText}>{day.low}°</Text>
+                  <View key={i} style={[styles.forecastRow, { backgroundColor: theme.cardBg }]}>
+                    <Text style={[styles.dayText, { color: theme.text }]}>{day.day}</Text>
+                    <View style={styles.iconBox}><WeatherIcon condition={day.condition} color={theme.text} /></View>
+                    <Text style={[styles.lowText, { color: theme.subText }]}>{day.low}°</Text>
                     <View style={styles.rangeBarContainer}>
-                      <View style={[styles.rangeBarFill, { marginLeft: `${Math.max(0, Math.min(60, day.rangeProgress))}%` }]} />
+                      <View style={[styles.rangeBarFill, { backgroundColor: theme.accent, marginLeft: `${Math.max(0, Math.min(60, day.rangeProgress))}%` }]} />
                     </View>
-                    <Text style={styles.highText}>{day.high}°</Text>
+                    <Text style={[styles.highText, { color: theme.text }]}>{day.high}°</Text>
                   </View>
               ))}
             </View>
+
+            <TouchableOpacity onPress={() => Linking.openURL(attributionUrl)}>
+              <Text style={[styles.legalText, { color: theme.subText }]}>Data from Apple Weather</Text>
+            </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
       </LinearGradient>
@@ -231,34 +262,35 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, backgroundColor: '#0B1026', justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   topActions: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10 },
-  actionCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  actionCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   header: { alignItems: 'center', marginTop: 10 },
-  cityText: { color: 'white', fontSize: 24, fontWeight: '300', letterSpacing: 4 },
-  updateText: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '700', marginTop: 5 },
-  mainTemp: { color: 'white', fontSize: 110, fontWeight: 'bold' },
-  mainCondition: { color: 'white', opacity: 0.6, fontSize: 18, textAlign: 'center', marginTop: -10 },
-  bentoLarge: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 24, padding: 20, marginTop: 30 },
-  cardTitle: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '800' },
+  cityText: { fontSize: 24, fontWeight: '300', letterSpacing: 4 },
+  updateText: { fontSize: 10, fontWeight: '700', marginTop: 5 },
+  mainTemp: { fontSize: 110, fontWeight: 'bold' },
+  mainCondition: { opacity: 0.6, fontSize: 18, textAlign: 'center', marginTop: -10 },
+  bentoLarge: { borderRadius: 24, padding: 20, marginTop: 30 },
+  cardTitle: { fontSize: 10, fontWeight: '800' },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
-  statCard: { width: '31%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 22, padding: 15 },
-  statValue: { color: 'white', fontSize: 18, fontWeight: 'bold', marginTop: 10 },
-  statLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 8, fontWeight: '900' },
+  statCard: { width: '31%', borderRadius: 22, padding: 15 },
+  statValue: { fontSize: 18, fontWeight: 'bold', marginTop: 10 },
+  statLabel: { fontSize: 8, fontWeight: '900' },
   forecastSection: { marginTop: 30, paddingBottom: 50 },
-  sectionHeader: { color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: '800', marginBottom: 15 },
-  forecastRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)', padding: 15, borderRadius: 20, marginBottom: 8 },
-  dayText: { color: 'white', width: 45, fontWeight: '600' },
+  sectionHeader: { fontSize: 11, fontWeight: '800', marginBottom: 15 },
+  forecastRow: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 20, marginBottom: 8 },
+  dayText: { width: 45, fontWeight: '600' },
   iconBox: { width: 40, alignItems: 'center' },
-  lowText: { color: 'rgba(255,255,255,0.4)', width: 30, textAlign: 'right' },
-  highText: { color: 'white', width: 30 },
-  rangeBarContainer: { flex: 1, height: 4, backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: 15, borderRadius: 10 },
-  rangeBarFill: { width: '40%', height: '100%', backgroundColor: '#3478F6', borderRadius: 10 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)' },
+  lowText: { width: 30, textAlign: 'right' },
+  highText: { width: 30 },
+  rangeBarContainer: { flex: 1, height: 4, backgroundColor: 'rgba(0,0,0,0.05)', marginHorizontal: 15, borderRadius: 10 },
+  rangeBarFill: { width: '40%', height: '100%', borderRadius: 10 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   searchSheet: { flex: 1, padding: 20, paddingTop: 60 },
-  searchBarWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, paddingHorizontal: 15, height: 60, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  searchInput: { flex: 1, color: 'white', marginLeft: 10, fontSize: 16 },
-  suggestionItem: { flexDirection: 'row', alignItems: 'center', padding: 18, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 15, marginBottom: 10 },
-  suggestionName: { color: 'white', fontSize: 16, fontWeight: '600' },
-  suggestionCountry: { color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 }
+  searchBarWrapper: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, paddingHorizontal: 15, height: 60, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
+  searchInput: { flex: 1, marginLeft: 10, fontSize: 16 },
+  suggestionItem: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 15, marginBottom: 10 },
+  suggestionName: { fontSize: 16, fontWeight: '600' },
+  suggestionCountry: { fontSize: 12, marginTop: 2 },
+  legalText: { textAlign: 'center', marginTop: 40, fontSize: 10, textDecorationLine: 'underline' }
 });
