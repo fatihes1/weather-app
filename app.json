@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "WeatherApp",
+    "name": "Luxury Weather",
     "slug": "WeatherApp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,7 +12,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fatihes.simpleweather",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Luxury Weather needs your location to provide highly accurate, real-time local weather forecasts."
+      }
     },
     "android": {
       "adaptiveIcon": {

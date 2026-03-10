@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Droplets, Sun, Wind, Cloud, CloudRain,
   CloudLightning, Search, X, Navigation, MapPin
@@ -48,6 +49,7 @@ export default function App() {
   const [isSearchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  const [recentSearches, setRecentSearches] = useState([]);
   const [attributionUrl, setAttributionUrl] = useState('https://developer.apple.com/weatherkit/data-source-attribution/');
 
   // --- TEMA TANIMLAMALARI ---
@@ -58,33 +60,69 @@ export default function App() {
     subText: isDay ? 'rgba(74, 46, 25, 0.5)' : 'rgba(255, 255, 255, 0.4)',
     cardBg: isDay ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.05)',
     accent: isDay ? '#FF8C00' : '#3478F6',
-    shimmer: isDay ? ['#4A2E19', '#DAA520', '#F2F2F2', '#DAA520', '#4A2E19']
+    shimmer: isDay ? ['#4A2E19', '#DAA520', '#FEF9E7', '#DAA520', '#4A2E19']
         : ['#749BFF', '#749BFF', '#FFFFFF', '#749BFF', '#749BFF'],
     barStyle: isDay ? 'dark-content' : 'light-content'
   };
 
+  // Geçmiş aramaları yükle
+  const loadRecentSearches = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('@recent_searches');
+      if (saved) setRecentSearches(JSON.parse(saved));
+    } catch (e) { console.error(e); }
+  };
+
+  // Yeni aramayı kaydet
+  const saveRecentSearch = async (cityObj) => {
+    try {
+      const filtered = recentSearches.filter(s => s.name !== cityObj.name);
+      const updated = [cityObj, ...filtered].slice(0, 5);
+      setRecentSearches(updated);
+      await AsyncStorage.setItem('@recent_searches', JSON.stringify(updated));
+    } catch (e) { console.error(e); }
+  };
+
   const updateWeather = async (lat, lon, customName = null) => {
+    if (!lat || !lon) return;
     setIsLoading(true);
     setSearchVisible(false);
+
     try {
-      if (!customName) {
-        let geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
-        if (geocode.length > 0) {
-          setCityName(geocode[0].city?.toUpperCase() || geocode[0].region?.toUpperCase());
-        }
-      } else {
+      // 1. ŞEHİR İSMİ BELİRLEME (Non-blocking / Hata toleranslı)
+      if (customName) {
         setCityName(customName.toUpperCase());
+        saveRecentSearch({ name: customName, lat, lon });
+      } else {
+        try {
+          let geocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+          if (geocode && geocode.length > 0) {
+            // City yoksa district, o da yoksa region kullanıyoruz
+            const name = geocode[0].city || geocode[0].subregion || geocode[0].region || "MY LOCATION";
+            setCityName(name.toUpperCase());
+          } else {
+            setCityName("MY LOCATION");
+          }
+        } catch (geocodeError) {
+          console.log("Geocoding failed, using coordinates", geocodeError);
+          setCityName("MY LOCATION"); // İsim bulunamazsa bile uygulama takılmasın
+        }
       }
 
-      const response = await fetch(`https://serverless-weather.vercel.app/api/weather?lat=${lat}&lon=${lon}`);
+      // 2. HAVA DURUMU VERİSİNİ ÇEKME
+      const apiUrl = process.env.EXPO_PUBLIC_WEATHER_API_URL;
+      const response = await fetch(`${apiUrl}?lat=${lat}&lon=${lon}`);
       const json = await response.json();
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
       setWeather(formatWeatherData(json));
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
     } catch (e) {
+      console.error("Main update error", e);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      alert("Weather data could not be retrieved.");
+      alert("Weather update failed.");
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Her durumda loading'i kapat
     }
   };
 
@@ -114,6 +152,7 @@ export default function App() {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
+      await loadRecentSearches();
       handleMyLocation();
     })();
   }, []);
@@ -123,10 +162,10 @@ export default function App() {
     if (current.metadata?.attributionURL) setAttributionUrl(current.metadata.attributionURL);
 
     return {
-      isDay: current.daylight, //
+      isDay: current.daylight,
       temp: Math.round(current.temperature),
       condition: current.conditionCode,
-      humidity: Math.round(current.humidity * 100), //
+      humidity: Math.round(current.humidity * 100),
       uvIndex: current.uvIndex,
       windSpeed: Math.round(current.windSpeed),
       lastUpdated: new Date(current.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -156,7 +195,6 @@ export default function App() {
         <StatusBar barStyle={theme.barStyle} />
         <SafeAreaView style={{ flex: 1 }}>
 
-          {/* Header Actions */}
           <View style={styles.topActions}>
             <TouchableOpacity onPress={handleMyLocation} style={[styles.actionCircle, { backgroundColor: theme.cardBg }]}>
               <Navigation color={theme.text} size={20} />
@@ -169,7 +207,6 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          {/* Search Modal */}
           <Modal visible={isSearchVisible} animationType="slide" transparent={true}>
             <View style={styles.modalOverlay}>
               <LinearGradient colors={theme.bg} style={styles.searchSheet}>
@@ -183,27 +220,39 @@ export default function App() {
                       value={searchQuery}
                       onChangeText={fetchSuggestions}
                   />
-                  <TouchableOpacity onPress={() => setSearchVisible(false)}>
+                  <TouchableOpacity onPress={() => {setSearchVisible(false); setSearchQuery('');}}>
                     <X color={theme.text} size={20} />
                   </TouchableOpacity>
                 </View>
 
+                <Text style={[styles.sectionHeader, { color: theme.subText, marginTop: 25, marginBottom: 10 }]}>
+                  {searchQuery.length > 2 ? 'RESULTS' : 'RECENT SEARCHES'}
+                </Text>
+
                 <FlatList
-                    data={suggestions}
+                    data={searchQuery.length > 2 ? suggestions : recentSearches}
                     keyExtractor={(item, index) => index.toString()}
                     renderItem={({ item }) => (
                         <TouchableOpacity
                             style={[styles.suggestionItem, { backgroundColor: theme.cardBg }]}
-                            onPress={() => updateWeather(item.geometry.coordinates[1], item.geometry.coordinates[0], item.properties.name)}
+                            onPress={() => {
+                              const lat = item.geometry ? item.geometry.coordinates[1] : item.lat;
+                              const lon = item.geometry ? item.geometry.coordinates[0] : item.lon;
+                              const name = item.properties ? item.properties.name : item.name;
+                              updateWeather(lat, lon, name);
+                            }}
                         >
                           <MapPin color={theme.subText} size={18} />
                           <View style={{marginLeft: 15}}>
-                            <Text style={[styles.suggestionName, { color: theme.text }]}>{item.properties.name}</Text>
-                            <Text style={[styles.suggestionCountry, { color: theme.subText }]}>{item.properties.country}</Text>
+                            <Text style={[styles.suggestionName, { color: theme.text }]}>
+                              {item.properties ? item.properties.name : item.name}
+                            </Text>
+                            {item.properties?.country && (
+                                <Text style={[styles.suggestionCountry, { color: theme.subText }]}>{item.properties.country}</Text>
+                            )}
                           </View>
                         </TouchableOpacity>
                     )}
-                    contentContainerStyle={{marginTop: 20}}
                 />
               </LinearGradient>
             </View>
@@ -221,7 +270,6 @@ export default function App() {
               <Text style={[styles.updateText, { color: theme.subText }]}>LAST UPDATED {weather.lastUpdated}</Text>
             </View>
 
-            {/* ShimmerText bileşenine colors prop'u eklediğinizden emin olun */}
             <ShimmerText text={`${weather.temp}°`} style={styles.mainTemp} shimmerColors={theme.shimmer} />
             <Text style={[styles.mainCondition, { color: theme.text }]}>{weather.condition}</Text>
 
@@ -276,7 +324,7 @@ const styles = StyleSheet.create({
   statCard: { width: '31%', borderRadius: 22, padding: 15 },
   statValue: { fontSize: 18, fontWeight: 'bold', marginTop: 10 },
   statLabel: { fontSize: 8, fontWeight: '900' },
-  forecastSection: { marginTop: 30, paddingBottom: 50 },
+  forecastSection: { marginTop: 30, paddingBottom: 0 },
   sectionHeader: { fontSize: 11, fontWeight: '800', marginBottom: 15 },
   forecastRow: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 20, marginBottom: 8 },
   dayText: { width: 45, fontWeight: '600' },
@@ -292,5 +340,5 @@ const styles = StyleSheet.create({
   suggestionItem: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 15, marginBottom: 10 },
   suggestionName: { fontSize: 16, fontWeight: '600' },
   suggestionCountry: { fontSize: 12, marginTop: 2 },
-  legalText: { textAlign: 'center', marginTop: 40, fontSize: 10, textDecorationLine: 'underline' }
+  legalText: { textAlign: 'center', marginTop: 20, fontSize: 10, textDecorationLine: 'underline' }
 });
