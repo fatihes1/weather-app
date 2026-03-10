@@ -15,7 +15,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.fatihes.simpleweather",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Luxury Weather needs your location to provide highly accurate, real-time local weather forecasts."
+        "NSLocationWhenInUseUsageDescription": "Luxury Weather needs your location to provide highly accurate, real-time local weather forecasts.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -28,6 +29,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b887ae14-fd1f-43b0-b2ec-0442626413ce"
+      }
     }
   }
 }
