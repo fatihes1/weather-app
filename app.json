@@ -8,11 +8,11 @@
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
+      "resizeMode": "cover",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.fatihes.simpleweather",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Luxury Weather needs your location to provide highly accurate, real-time local weather forecasts.",
