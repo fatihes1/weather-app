@@ -12,7 +12,10 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_WEATHER_API_URL": "https://serverless-weather.vercel.app/api/weather"
+      }
     }
   },
   "submit": {
